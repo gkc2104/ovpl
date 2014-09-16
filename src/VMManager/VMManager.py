@@ -13,12 +13,10 @@
 # to do : handle exceptions
 
 import os
-import sys
 import subprocess
 import shlex
 import json
 import Logging
-sys.path.insert(0, './..')
 import GitCommands
 
 from LabActionRunner import LabActionRunner
