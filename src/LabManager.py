@@ -10,7 +10,7 @@ import time
 import math
 
 import Logging
-from envsetup import EnvSetUp
+import GitCommands
 
 #GIT_CLONE_LOC = "./lab-repo-cache/"
 #LAB_SPEC_LOC = "/scripts/labspec.json"
@@ -21,7 +21,7 @@ class LabSpecInvalid(Exception):
         Exception(self, msg)
 
 def get_lab_reqs(lab_id, lab_src_url, version=None):
-    e = EnvSetUp()	
+
     Logging.LOGGER.debug("LabManager: get_lab_reqs():  Invoked from Controller")
     current_file_path = os.path.dirname(os.path.abspath(__file__))
     config_spec = json.loads(open(current_file_path + "/../config/config.json").read())
@@ -36,79 +36,17 @@ def get_lab_reqs(lab_id, lab_src_url, version=None):
         repo = lab_src_url.split('/')[-1]
         repo_name = lab_id + (repo[:-4] if repo[-4:] == ".git" else repo)
         return repo_name
-
-    def repo_exists(repo_name):
-        Logging.LOGGER.debug("LabManager: repo_exists()")
-        return os.path.isdir(GIT_CLONE_LOC+repo_name)
-
-    def clone_repo(repo_name):
-
-        Logging.LOGGER.debug("LabManager, clone_repo(): git clone %s %s%s" % (lab_src_url, GIT_CLONE_LOC, repo_name))
-        git_clone_str = "git clone %s %s%s" % (lab_src_url, GIT_CLONE_LOC, repo_name) # To avoid null at the end
-        clone_cmd = shlex.split(git_clone_str.encode('ascii'))
-        Logging.LOGGER.debug("LabManager, clone_repo(): clone_cmd = %s" % (clone_cmd))
-
-        try:
-            subprocess.check_call(clone_cmd, stdout=Logging.LOG_FD, stderr=Logging.LOG_FD)
-        except Exception, e:
-            Logging.LOGGER.error("LabManager: clone_repo(): git clone failed: %s %s" % (repo_name, str(e)))
-            raise e
-
-    def pull_repo(repo_name):
-        Logging.LOGGER.error("LabManager: pull_repo(), pull_cmd = %s" % (GIT_CLONE_LOC + repo_name))
-        pull_cmd = "git --git-dir=%s/.git pull" % (GIT_CLONE_LOC + repo_name)
-        Logging.LOGGER.debug(pull_cmd)
-        try:
-            subprocess.check_call(pull_cmd, stdout=Logging.LOG_FD, stderr=Logging.LOG_FD, shell=True)
-        except Exception, e:
-            Logging.LOGGER.error("LabManager: pull_repo(), git pull failed: %s %s" % (repo_name, str(e)))
-            raise e
-
-    def reset_repo(repo_name):
-        Logging.LOGGER.error("LabManager: reset_repo(), reset_cmd = %s" % (GIT_CLONE_LOC + repo_name))
-        reset_cmd = "git --git-dir=%s/.git reset --hard" % (GIT_CLONE_LOC + repo_name)
-        Logging.LOGGER.debug(reset_cmd)
-        try:
-            subprocess.check_call(reset_cmd, stdout=Logging.LOG_FD, stderr=Logging.LOG_FD, shell=True)
-        except Exception, e:
-            Logging.LOGGER.error("LabManager: reset_repo(), git reset failed: %s %s" % (repo_name, str(e)))
-            raise e
-
-    def checkout_version(repo_name):
-        Logging.LOGGER.error("LabManager: checkout_version(), repo_name = %s" % (repo_name))
-        if version:
-            try:
-                checkout_cmd = shlex.split("git --git-dir=%s checkout %s" \
-                                    % ((GIT_CLONE_LOC + repo_name), version))
-                subprocess.check_call(checkout_cmd, stdout=Logging.LOG_FD, stderr=Logging.LOG_FD)
-            except Exception, e:
-                Logging.LOGGER.error("git checkout failed for repo %s tag %s: %s" \
-                                    % (repo_name, version, str(e)))
-                raise e
-
-    def get_lab_spec(repo_name):
-        Logging.LOGGER.error("LabManager: get_lab_spec(); repo_name = %s" % (repo_name))
-        # Allow no lab spec but not an invalid json as a lab spec
-        spec_path = GIT_CLONE_LOC + repo_name + LAB_SPEC_LOC
-        if not os.path.exists(spec_path):
-            Logging.LOGGER.error("LabManager: get_lab_spec(); Lab spec file not found")
-            raise LabSpecInvalid("Lab spec file not found")
-        try:
-            return json.loads(open(spec_path).read())
-        except Exception, e:
-            Logging.LOGGER.error("LabManager: get_lab_spec(); Lab spec JSON invalid: " + str(e))
-            raise LabSpecInvalid("Lab spec JSON invalid: " + str(e))
-
-    repo_name = construct_repo_name(lab_id, lab_src_url)
     
-    if repo_exists(repo_name):
-        reset_repo(repo_name)
-        pull_repo(repo_name)
+    
+    repo_name = construct_repo_name(lab_id, lab_src_url,)
+    if GitCommands.repo_exists(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'LabManager()'):
+        GitCommands.reset_repo(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'LabManager()')
+        GitCommands.pull_repo(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'LabManager()')
     else:
-        clone_repo(repo_name)
+        GitCommands.clone_repo(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'LabManager()')
 
-    checkout_version(repo_name)
-    return get_lab_spec(repo_name)
+    GitCommands.checkout_version(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'LabManager()',version)
+    return GitCommands.get_lab_spec(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'LabManager()')
     #vm_spec = json.loads(open("vmspec.json", "r").read())
 
 def test_lab(vmmgr_ip, port, lab_src_url, version=None):
@@ -121,7 +59,6 @@ def test_lab(vmmgr_ip, port, lab_src_url, version=None):
         # run Lab Action Runner
     if not 'http' in vmmgr_ip:
         raise Exception('Protocol not specified in VMManager host address!!')
-    e = EnvSetUp()
 
     Logging.LOGGER.debug("LabManager.test_lab(): vmmgr_ip = %s, port = %s, lab_src_url = %s" % (vmmgr_ip, port, lab_src_url))
     payload = {"lab_src_url": lab_src_url, "version": version}
@@ -151,5 +88,3 @@ if __name__ == '__main__':
         print "Test Successful"
     else:
         print "Test Unsuccessful"
-
-

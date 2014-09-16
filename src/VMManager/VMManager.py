@@ -13,16 +13,18 @@
 # to do : handle exceptions
 
 import os
+import sys
 import subprocess
 import shlex
 import json
 import Logging
+sys.path.insert(0, './..')
+import GitCommands
 
 from LabActionRunner import LabActionRunner
 
 GIT_CLONE_LOC = "/root/VMManager/lab-repo-cache/"
 LAB_SPEC_LOC = "/scripts/labspec.json"
-
 class LabSpecInvalid(Exception):
     def __init__(self, msg):
         Exception(self, msg)
@@ -99,59 +101,16 @@ def test_lab(lab_src_url, version=None):
         repo_name = repo[:-4] if repo[-4:] == ".git" else repo
         return repo_name
 
-    def repo_exists(repo_name):
-        return os.path.isdir(GIT_CLONE_LOC+repo_name)
-
-    def clone_repo(repo_name):
-        clone_cmd = "git clone %s %s%s" % (lab_src_url, GIT_CLONE_LOC,repo_name)
-        Logging.LOGGER.debug(clone_cmd)
-        try:
-            subprocess.check_call(clone_cmd, stdout=Logging.LOG_FD, stderr=Logging.LOG_FD, shell=True)
-        except Exception, e:
-            Logging.LOGGER.error("git clone failed for repo %s: %s" % (repo_name, str(e)))
-            raise e
-
-    def pull_repo(repo_name):
-        pull_cmd = "git --git-dir=%s/.git pull" % (GIT_CLONE_LOC + repo_name)
-        Logging.LOGGER.debug(pull_cmd)
-        try:
-            subprocess.check_call(pull_cmd, stdout=Logging.LOG_FD, stderr=Logging.LOG_FD, shell=True)
-        except Exception, e:
-            Logging.LOGGER.error("git pull failed for repo %s: %s" % (repo_name, str(e)))
-            raise e
-
-    def checkout_version(repo_name):
-        if version:
-            try:
-                checkout_cmd = shlex.split("git --git-dir=%s checkout %s" \
-                                    % ((GIT_CLONE_LOC + repo_name), version))
-                Logging.LOGGER.debug(checkout_cmd)
-                subprocess.check_call(checkout_cmd, stdout=Logging.LOG_FD, stderr=Logging.LOG_FD)
-            except Exception, e:
-                Logging.LOGGER.error("git checkout failed for repo %s tag %s: %s" \
-                                    % (repo_name, version, str(e)))
-                raise e
-
-    def get_lab_spec(repo_name):
-        repo_path = GIT_CLONE_LOC + repo_name + LAB_SPEC_LOC
-        if not os.path.exists(repo_path):
-            Logging.LOGGER.error("Lab spec file not found")
-            raise LabSpecInvalid("Lab spec file not found")
-        try:
-            return json.loads(open(repo_path).read())
-        except Exception, e:
-            Logging.LOGGER.error("Lab spec JSON invalid: " + str(e))
-            raise LabSpecInvalid("Lab spec JSON invalid: " + str(e))
-
+    
     Logging.LOGGER.info("Starting test_lab")
     repo_name = construct_repo_name()
-    if repo_exists(repo_name):
-        pull_repo(repo_name)
+    if GitCommands.repo_exists(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'VMManager'):
+        GitCommands.pull_repo(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'VMManager')
     else:
-        clone_repo(repo_name)
-    checkout_version(repo_name)
+        GitCommands.clone_repo(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'VMManager')
+    GitCommands.checkout_version(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'VMManager',version)
 
-    lab_spec = get_lab_spec(repo_name)
+    lab_spec = GitCommands.get_lab_spec(repo_name,GIT_CLONE_LOC,lab_src_url,LAB_SPEC_LOC,'VMManager')
     try:
         os.chdir(GIT_CLONE_LOC+repo_name+"/scripts")
         lar = LabActionRunner(get_build_installer_steps_spec(lab_spec))
